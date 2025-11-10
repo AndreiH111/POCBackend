@@ -1,10 +1,12 @@
 // api/noAuthentication.js
-import express from "express";
-
+const express = require('express');
 const app = express();
 
-app.get("/noAuth", (req, res) => {
-  res.json({ message: "Hello from Express on Vercel!" });
+app.get('/noAuth', (req, res) => {
+  res.json({ message: 'No Authentication' });
 });
 
-export default app;
+module.exports = (req, res) => {
+  app(req, res);
+};
+
