@@ -9,11 +9,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/"
-    },
-    { 
-      "src": "/api/noAuth", 
-      "dest": "/api/noAuthentication.js" 
+      "dest": "index.js"
     }
   ]
 }
