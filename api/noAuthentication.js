@@ -1,12 +1,9 @@
 // api/noAuthentication.js
 const express = require('express');
-const app = express();
+const router = express.Router();
 
-app.get('/noAuth', (req, res) => {
-  res.json({ message: 'No Authentication' });
+router.get('/', (req, res) => {
+  res.json({ message: 'No authentication route works!' });
 });
 
-module.exports = (req, res) => {
-  app(req, res);
-};
-
+module.exports = router;
