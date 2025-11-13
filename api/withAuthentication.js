@@ -1,100 +1,58 @@
 // api/withAuthentication.js
-/**
- * Minimal JWT authentication for an Express API route (serverless-friendly).
- * - POST /login      -> issues a JWT (demo credentials)
- * - GET  /protected  -> requires Bearer token
- *
- * Env vars:
- *   JWT_SECRET       (required) e.g., a long random string
- *   JWT_EXPIRES_IN   (optional) e.g., "1h", "15m", "7d" (default: "1h")
- *
- * Install:
- *   npm i express jsonwebtoken
- */
-
 const express = require('express');
-const jwt = require('jsonwebtoken');
+const router = express.Router();
+const users = require('../data/users');
+const axios = require('axios');
 
-const app = express();
-app.use(express.json());
+// Environment variables (never hardcode secrets)
+const TOKEN_URL = process.env.OAUTH_TOKEN_URL;  // e.g. 'https://your-auth-server.com/oauth/token'
+const CLIENT_ID = process.env.OAUTH_CLIENT_ID;
+const CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
 
-// --- Config ---
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+// Middleware to verify OAuth2 token
+async function verifyAccessToken(req, res, next) {
+  const authHeader = req.headers.authorization;
 
-if (!JWT_SECRET) {
-  console.warn(
-    '[withAuthentication] WARNING: JWT_SECRET is not set. ' +
-    'Set process.env.JWT_SECRET to a strong, random value in production.'
-  );
-}
-
-// --- Middleware: verify JWT ---
-function authenticateJWT(req, res, next) {
-  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid Authorization header (expected Bearer token).' });
+    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
   }
 
-  const token = authHeader.slice('Bearer '.length).trim();
+  const token = authHeader.split(' ')[1];
 
-  jwt.verify(token, JWT_SECRET, (err, payload) => {
-    if (err) {
-      // err.name might be "TokenExpiredError", "JsonWebTokenError", etc.
-      return res.status(401).json({ error: 'Invalid or expired token.', details: err.name });
+  try {
+    // You can validate token with your OAuth server’s introspection endpoint if available
+    const response = await axios.post(
+      TOKEN_URL + '/introspect', // or your specific introspection endpoint
+      new URLSearchParams({ token }),
+      {
+        auth: {
+          username: CLIENT_ID,
+          password: CLIENT_SECRET
+        }
+      }
+    );
+
+    if (!response.data.active) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
     }
-    // Attach decoded payload for downstream use
-    req.user = payload;
+
+    // Attach token info for downstream routes
+    req.user = response.data;
     next();
-  });
+
+  } catch (err) {
+    console.error('Token verification failed:', err.message);
+    return res.status(403).json({ error: 'Token verification failed' });
+  }
 }
 
-// --- Demo login route ---
-// In production: replace with real user lookup + password verification
-app.post('/login', (req, res) => {
-  const { username, password } = req.body || {};
-
-  // DEMO ONLY: Accepts a fixed user
-  if (username === 'demo' && password === 'password123') {
-    // Include minimal claims. Add roles/permissions as needed.
-    const payload = {
-      sub: 'user-123',       // subject (user id)
-      username: 'demo',      // safe info to store in token
-      roles: ['user']        // authorization claims
-    };
-
-    const token = jwt.sign(payload, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN,
-      // Consider setting issuer/audience if you validate them:
-      // issuer: 'your-app',
-      // audience: 'your-client'
-    });
-
-    return res.json({
-      access_token: token,
-      token_type: 'Bearer',
-      expires_in: JWT_EXPIRES_IN
-    });
-  }
-
-  return res.status(401).json({ error: 'Invalid credentials.' });
-});
-
-// --- Protected route example ---
-app.get('/protected', authenticateJWT, (req, res) => {
+// Protected route
+router.get('/', verifyAccessToken, (req, res) => {
   res.json({
-    message: 'Protected content accessed successfully.',
-    user: req.user
+    message: 'With authentication route works!',
+    users,
+    authenticatedClient: req.user.client_id || 'unknown-client'
   });
 });
 
-// Optional: a public ping route
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-// Export as serverless handler (works for platforms like Vercel/Netlify)
-// If you’re using a traditional Express server, you’d instead do app.listen(...)
-module.exports = (req, res) => {
-  app(req, res);
-};
+module.exports = router;
