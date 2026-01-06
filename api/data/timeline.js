@@ -97,4 +97,4 @@ const activitiesTimeline = [
   },
 ];
 
-module.exports = activitiesTimeline;
+module.exports = { activitiesTimeline };
